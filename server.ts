@@ -694,6 +694,110 @@ app.post('/api/banking/withdraw', (req, res) => {
   res.json({ success: true });
 });
 
+// --- MONNIFY INTEGRATION ---
+
+async function getMonnifyToken() {
+  const apiKey = process.env.MONNIFY_API_KEY;
+  const secretKey = process.env.MONNIFY_SECRET_KEY;
+  const baseUrl = process.env.MONNIFY_BASE_URL || 'https://api.monnify.com';
+  
+  if (!apiKey || !secretKey) {
+    throw new Error('Monnify API credentials not configured');
+  }
+
+  const auth = Buffer.from(`${apiKey}:${secretKey}`).toString('base64');
+  
+  try {
+    const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`
+      }
+    });
+    
+    const data = await response.json();
+    if (data.requestSuccessful) {
+      return data.responseBody.accessToken;
+    }
+    throw new Error(data.responseMessage || 'Failed to get Monnify token');
+  } catch (error) {
+    console.error('Monnify Token Error:', error);
+    throw error;
+  }
+}
+
+app.post('/api/banking/monnify/initialize', async (req, res) => {
+  const { userId, amount, email, name } = req.body;
+  const reference = `GK-${uuidv4()}`;
+  
+  try {
+    const token = await getMonnifyToken();
+    const baseUrl = process.env.MONNIFY_BASE_URL || 'https://api.monnify.com';
+    
+    const response = await fetch(`${baseUrl}/api/v1/merchant/transactions/init-transaction`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        amount,
+        customerName: name,
+        customerEmail: email,
+        paymentReference: reference,
+        paymentDescription: 'GigKinetics Wallet Top-up',
+        currencyCode: 'NGN',
+        contractCode: process.env.MONNIFY_CONTRACT_CODE,
+        redirectUrl: `${req.headers.origin}/wallet?ref=${reference}`,
+        paymentMethods: ['CARD', 'ACCOUNT_TRANSFER']
+      })
+    });
+    
+    const data = await response.json();
+    if (data.requestSuccessful) {
+      // Store the pending transaction in DB
+      db.prepare("INSERT INTO banking_transactions (id, user_id, type, amount, description, status, monnify_reference) VALUES (?, ?, 'transfer_in', ?, ?, 'pending', ?)")
+        .run(reference, userId, amount, 'Wallet Top-up via Monnify', reference);
+        
+      res.json(data.responseBody);
+    } else {
+      res.status(400).json({ error: data.responseMessage });
+    }
+  } catch (error: any) {
+    console.error('Monnify Init Error:', error);
+    res.status(500).json({ error: error.message || 'Failed to initialize payment' });
+  }
+});
+
+app.post('/api/banking/monnify/webhook', (req, res) => {
+  const { eventType, eventData } = req.body;
+  
+  // In production, verify the Monnify signature here
+  
+  if (eventType === 'SUCCESSFUL_TRANSACTION') {
+    const { paymentReference, amountPaid, settlementAmount, transactionReference } = eventData;
+    
+    const tx = db.prepare("SELECT * FROM banking_transactions WHERE id = ? AND status = 'pending'").get(paymentReference) as any;
+    
+    if (tx) {
+      db.transaction(() => {
+        // Update user balance
+        db.prepare("UPDATE users SET balance = balance + ? WHERE id = ?").run(amountPaid, tx.user_id);
+        // Update transaction status
+        db.prepare("UPDATE banking_transactions SET status = 'completed', monnify_transaction_id = ? WHERE id = ?")
+          .run(transactionReference, paymentReference);
+        
+        // Notify user
+        db.prepare("INSERT INTO notifications (id, user_id, type, title, message) VALUES (?, ?, 'payment', 'Wallet Funded', ?)")
+          .run(uuidv4(), tx.user_id, `Your wallet has been credited with ₦${amountPaid.toLocaleString()} sharp sharp.`);
+      })();
+      console.log(`[MONNIFY] Payment successful for ref: ${paymentReference}`);
+    }
+  }
+  
+  res.sendStatus(200);
+});
+
 app.post('/api/banking/fund', (req, res) => {
   const { userId, amount } = req.body;
   

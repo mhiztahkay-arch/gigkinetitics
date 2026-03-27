@@ -89,21 +89,28 @@ export default function Wallet() {
     if (!topUpAmount) return;
     setIsProcessing(true);
     try {
-      const res = await fetch('/api/banking/fund', {
+      const res = await fetch('/api/banking/monnify/initialize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: dbUser.id,
-          amount: parseInt(topUpAmount)
+          amount: parseInt(topUpAmount),
+          email: dbUser.email,
+          name: dbUser.name
         })
       });
 
       if (res.ok) {
-        alert('Top-up successful! Your wallet is now heavy.');
-        setShowTopUpModal(false);
-        setTopUpAmount('');
-        fetchTransactions();
-        refreshUser();
+        const data = await res.json();
+        // Redirect to Monnify checkout
+        if (data.checkoutUrl) {
+          window.location.href = data.checkoutUrl;
+        } else {
+          alert('Failed to get checkout URL');
+        }
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to initialize payment');
       }
     } catch (error) {
       alert('Network error');

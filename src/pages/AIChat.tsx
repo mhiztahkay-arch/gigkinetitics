@@ -37,11 +37,14 @@ export default function AIChat({ user }: { user: any }) {
     setIsLoading(true);
 
     try {
-      // Prepare history for Gemini (excluding the last message we just added)
-      const history = messages.map(m => ({
-        role: m.role === 'ai' ? 'model' : 'user',
-        parts: [{ text: m.content }]
-      }));
+      // Prepare history for Gemini (excluding the initial AI greeting if it's the first message)
+      // Gemini history should ideally start with a 'user' message.
+      const history = messages
+        .filter((_, index) => index > 0 || messages[0].role === 'user')
+        .map(m => ({
+          role: m.role === 'ai' ? 'model' : 'user',
+          parts: [{ text: m.content }]
+        }));
 
       // Call Gemini directly from frontend
       const aiContent = await chatWithAI(userMsg, history, {
