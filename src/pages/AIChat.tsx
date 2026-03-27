@@ -3,6 +3,7 @@ import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { useTheme } from '../lib/ThemeContext';
+import { chatWithAI } from '../lib/ai';
 
 interface Message {
   role: 'user' | 'ai';
@@ -30,32 +31,32 @@ export default function AIChat({ user }: { user: any }) {
 
     const userMsg = content;
     setInput('');
+    
+    // Add user message to UI
     setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setIsLoading(true);
 
     try {
+      // Prepare history for Gemini (excluding the last message we just added)
       const history = messages.map(m => ({
         role: m.role === 'ai' ? 'model' : 'user',
         parts: [{ text: m.content }]
       }));
 
-      const res = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: userMsg,
-          history: history
-        })
+      // Call Gemini directly from frontend
+      const aiContent = await chatWithAI(userMsg, history, {
+        userName: user?.name,
+        userRole: user?.role,
+        userBalance: user?.balance
       });
 
-      if (!res.ok) throw new Error('Failed to fetch AI response');
-      
-      const data = await res.json();
-      const aiContent = data.text || "Omo, I no fit process that one. Abeg try again.";
-      setMessages(prev => [...prev, { role: 'ai', content: aiContent }]);
-    } catch (error) {
+      setMessages(prev => [...prev, { role: 'ai', content: aiContent || "Omo, I no fit process that one. Abeg try again." }]);
+    } catch (error: any) {
       console.error('AI Error:', error);
-      setMessages(prev => [...prev, { role: 'ai', content: "Omo, network don fall. Abeg check your connection and try again." }]);
+      const errorMsg = error.message?.includes("API key") 
+        ? "Omo, Gemini API key no dey configured. Abeg check your settings."
+        : "Omo, network don fall. Abeg check your connection and try again.";
+      setMessages(prev => [...prev, { role: 'ai', content: errorMsg }]);
     } finally {
       setIsLoading(false);
     }

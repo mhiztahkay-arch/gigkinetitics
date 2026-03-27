@@ -248,77 +248,7 @@ app.post('/api/escrow/release', (req, res) => {
   res.json({ success: true, fee, released: providerAmount });
 });
 
-app.post('/api/ai/chat', async (req, res) => {
-  const { message, history, context } = req.body;
-  
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-    console.error('Gemini API key is missing or placeholder value detected.');
-    return res.status(500).json({ error: 'Gemini API key is not configured correctly.' });
-  }
-
-  try {
-    const ai = new GoogleGenAI({ apiKey });
-    
-    // Get current commission settings for AI context
-    const receptionMethod = getCommissionSetting();
-    const receptionText = receptionMethod.type === 'opay' 
-      ? `OPay ${receptionMethod.account_number}` 
-      : `${receptionMethod.type} (${receptionMethod.account_number || receptionMethod.email})`;
-
-    const contents = history && history.length > 0 ? [...history, { role: 'user', parts: [{ text: message }] }] : message;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.1-pro-preview',
-      contents: contents,
-      config: {
-        systemInstruction: `You are GigKinetics AI, a world-class senior assistant for a Nigerian freelance platform. 
-        Your goal is to provide highly intelligent, accurate, and culturally relevant advice.
-        Use Nigerian English (Pidgin or colloquialisms where appropriate) to sound friendly and relatable, but maintain professional depth.
-        
-        Key Responsibilities:
-        1. Help users navigate the GigKinetics app (Dashboard, Jobs, Messages, Escrow).
-        2. Explain the Escrow system: 10% platform fee is automatically deducted and sent to ${receptionText}.
-        3. Provide expert advice on freelancing, contract negotiation, and financial management for Nigerians.
-        4. Analyze job trends and suggest skills that are currently in high demand in the Nigerian market.
-        
-        CRITICAL: You are a text-based AI. You DO NOT have audio or voice capabilities. Do not attempt to generate or process audio.
-        
-        Context: ${JSON.stringify(context)}`
-      }
-    });
-    res.json({ text: response.text });
-  } catch (error: any) {
-    console.error('AI Error:', error);
-    res.status(500).json({ error: 'Internal System Error' });
-  }
-});
-
-app.post('/api/ai/interpret', async (req, res) => {
-  const { text, targetLanguage, targetStyle } = req.body;
-  
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-    return res.status(500).json({ error: 'Gemini API key is not configured.' });
-  }
-
-  try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.1-pro-preview',
-      contents: `Interpret the following text into ${targetLanguage || 'English'} with a ${targetStyle || 'informal'} tone. 
-      If the text is already in that language and style, just refine it for clarity.
-      Text: "${text}"`,
-      config: {
-        systemInstruction: "You are a professional translator and communication specialist. Provide only the interpreted text without any preamble or explanation. Maintain the original meaning perfectly."
-      }
-    });
-    res.json({ text: response.text });
-  } catch (error: any) {
-    console.error('Interpretation Error:', error);
-    res.status(500).json({ error: 'Internal System Error' });
-  }
-});
+// --- STATS & ANALYTICS ---
 
 app.get('/api/stats/:userId', (req, res) => {
   const { userId } = req.params;

@@ -6,6 +6,7 @@ import Walkthrough from '../components/Walkthrough';
 import { useTheme } from '../lib/ThemeContext';
 import { format } from 'date-fns';
 import { uploadFile } from '../lib/upload';
+import { interpretText } from '../lib/ai';
 
 interface Post {
   id: string;
@@ -48,18 +49,13 @@ export default function Dashboard({ user }: { user: any }) {
   const handleInterpret = async (postId: string, text: string) => {
     setInterpreting(postId);
     try {
-      const res = await fetch('/api/ai/interpret', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          targetLanguage: user.preferred_language,
-          targetStyle: user.comm_style
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPosts(posts.map(p => p.id === postId ? { ...p, content: data.text } : p));
+      const interpreted = await interpretText(
+        text, 
+        user.preferred_language || 'English', 
+        user.comm_style || 'informal'
+      );
+      if (interpreted) {
+        setPosts(posts.map(p => p.id === postId ? { ...p, content: interpreted } : p));
       }
     } catch (error) {
       console.error('Interpretation failed', error);

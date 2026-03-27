@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTheme } from '../lib/ThemeContext';
 import { useAuth } from '../lib/AuthContext';
+import { interpretText } from '../lib/ai';
 
 interface Message {
   id?: number;
@@ -135,18 +136,13 @@ export default function Chat() {
     if (!msgId) return;
     setInterpretingMsg(msgId);
     try {
-      const res = await fetch('/api/ai/interpret', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          targetLanguage: dbUser?.preferred_language,
-          targetStyle: dbUser?.comm_style
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(messages.map(m => m.id === msgId ? { ...m, content: data.text } : m));
+      const interpreted = await interpretText(
+        text, 
+        dbUser?.preferred_language || 'English', 
+        dbUser?.comm_style || 'informal'
+      );
+      if (interpreted) {
+        setMessages(messages.map(m => m.id === msgId ? { ...m, content: interpreted } : m));
       }
     } catch (error) {
       console.error('Interpretation failed', error);
