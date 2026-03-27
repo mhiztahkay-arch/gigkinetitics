@@ -1,0 +1,5 @@
+{
+  "name": "GigKinetics",
+  "description": "A mobile office for Nigerians to connect, post gigs, chat, and do business with secure escrow payments, social media integration, and AI-driven job insights.",
+  "requestFramePermissions": ["camera", "microphone"]
+}
